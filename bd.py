@@ -1,15 +1,34 @@
 import streamlit as st
 import math
+import json
+import gspread
+from google.oauth2.service_account import Credentials
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Boda Pro - Plano de Salón y Cotizador",
+    page_title="Boda Pro - Plano y Sincronización en Vivo",
     page_icon="🏛️",
     layout="wide"
 )
 
-st.title("🏛️ Boda Pro - Plano Interactivo del Salón y Cotizador de Costos")
-st.markdown("Distribución amplia en patrón intercalado con panel de costos visible en tiempo real.")
+st.title("🏛️ Boda Pro - Plano Interactivo del Salón y Cotizador Sincronizado")
+st.markdown("Distribución amplia en patrón intercalado con panel de costos y sincronización en tiempo real vía Google Sheets.")
+
+# --- CONFIGURACIÓN DE CONEXIÓN CON GOOGLE SHEETS ---
+@st.cache_resource
+def conectar_google_sheets():
+    scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    creds_dict = dict(st.secrets["gcp_service_account"])
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+    client = gspread.authorize(creds)
+    sheet = client.open("Boda_Datos_Salon").sheet1
+    return sheet
+
+try:
+    sheet = conectar_google_sheets()
+except Exception as e:
+    st.error(f"Error conectando a Google Sheets. Verifica tus Secrets en Streamlit: {e}")
+    sheet = None
 
 # Función con amplio espaciado para evitar solapamientos entre mesas
 def calcular_coordenadas(index):
@@ -24,16 +43,45 @@ def calcular_coordenadas(index):
     y = 250 + (row * y_spacing)
     return x, y
 
-# Inicializar estado de mesas en la sesión
+# --- CARGAR / INICIALIZAR ESTADO DESDE LA NUBE ---
 if "tables" not in st.session_state:
-    st.session_state.tables = []
-    for i in range(2): 
-        x, y = calcular_coordenadas(i)
-        st.session_state.tables.append({
-            "x": x,
-            "y": y,
-            "seats": [{"name": "", "type": "empty"} for _ in range(8)]
-        })
+    if sheet:
+        try:
+            contenido_celda = sheet.cell(1, 1).value
+            if contenido_celda and contenido_celda.startswith("["):
+                st.session_state.tables = json.loads(contenido_celda)
+            else:
+                st.session_state.tables = []
+                for i in range(2):
+                    x, y = calcular_coordenadas(i)
+                    st.session_state.tables.append({
+                        "x": x, "y": y,
+                        "seats": [{"name": "", "type": "empty"} for _ in range(8)]
+                    })
+        except Exception:
+            st.session_state.tables = []
+            for i in range(2):
+                x, y = calcular_coordenadas(i)
+                st.session_state.tables.append({
+                    "x": x, "y": y,
+                    "seats": [{"name": "", "type": "empty"} for _ in range(8)]
+                })
+    else:
+        st.session_state.tables = []
+        for i in range(2):
+            x, y = calcular_coordenadas(i)
+            st.session_state.tables.append({
+                "x": x, "y": y,
+                "seats": [{"name": "", "type": "empty"} for _ in range(8)]
+            })
+
+def guardar_en_nube():
+    """Función para guardar el estado actual en la celda A1 del Google Sheet"""
+    if sheet:
+        try:
+            sheet.update_cell(1, 1, json.dumps(st.session_state.tables))
+        except Exception as e:
+            st.warning(f"No se pudo sincronizar con la nube: {e}")
 
 # --- CÁLCULOS FINANCIEROS Y DE COSTOS DETALLADOS ---
 num_mesas = len(st.session_state.tables)
@@ -55,7 +103,7 @@ costo_meseros = cant_meseros * UNIT_COSTO_MESERO
 
 costo_directo = costo_mesas + costo_adultos + costo_ninos + costo_meseros
 
-# --- PANEL PRINCIPAL DE COSTOS (VISIBLE DIRECTAMENTE EN PANTALLA) ---
+# --- PANEL PRINCIPAL DE COSTOS EN TIEMPO REAL ---
 st.subheader("📊 Resumen Maestro de Costos en Tiempo Real")
 
 col_c1, col_c2, col_c3, col_c4, col_c5 = st.columns(5)
@@ -84,6 +132,7 @@ if st.sidebar.button("➕ Añadir Mesa", use_container_width=True):
             "y": y,
             "seats": [{"name": "", "type": "empty"} for _ in range(8)]
         })
+        guardar_en_nube()
         st.rerun()
     else:
         st.sidebar.warning("Límite máximo de 14 mesas alcanzado.")
@@ -91,10 +140,12 @@ if st.sidebar.button("➕ Añadir Mesa", use_container_width=True):
 if st.sidebar.button("🗑️ Borrar Última Mesa", use_container_width=True):
     if st.session_state.tables:
         st.session_state.tables.pop()
+        guardar_en_nube()
         st.rerun()
 
 if st.sidebar.button("🧹 Limpiar Todo el Salón", use_container_width=True):
     st.session_state.tables = []
+    guardar_en_nube()
     st.rerun()
 
 # --- RENDERIZADO VISUAL DEL PLANO ---
@@ -109,6 +160,7 @@ if st.button("➕ 🪑 Añadir Nueva Mesa al Salón", type="primary", use_contai
             "y": y,
             "seats": [{"name": "", "type": "empty"} for _ in range(8)]
         })
+        guardar_en_nube()
         st.rerun()
     else:
         st.warning("Has alcanzado el límite máximo de 14 mesas.")
@@ -183,14 +235,16 @@ if st.session_state.tables:
         new_x = st.slider(f"Ajustar X (Mesa {selected_table+1})", min_value=100, max_value=2000, value=int(t_data['x']), step=10, key=f"x_{selected_table}")
         if new_x != t_data['x']:
             t_data['x'] = new_x
+            guardar_en_nube()
             st.rerun()
     with col_pos2:
         new_y = st.slider(f"Ajustar Y (Mesa {selected_table+1})", min_value=100, max_value=1200, value=int(t_data['y']), step=10, key=f"y_{selected_table}")
         if new_y != t_data['y']:
             t_data['y'] = new_y
+            guardar_en_nube()
             st.rerun()
 
-    st.markdown("#### Asignación de Asientos (Sillas 1 a 8):")
+    st.markdown("#### Asignación de Asientos (Sillas 1 a Rellenar):")
     for s_idx in range(8):
         seat = t_data['seats'][s_idx]
         s_col1, s_col2, s_col3 = st.columns([1, 2, 3])
@@ -220,6 +274,7 @@ if st.session_state.tables:
                     seat['name'] = ""
                 elif not seat['name']:
                     seat['name'] = f"Invitado {s_idx+1}"
+                guardar_en_nube()
                 st.rerun()
                 
         with s_col3:
@@ -232,4 +287,5 @@ if st.session_state.tables:
             )
             if nuevo_nombre != seat['name']:
                 seat['name'] = nuevo_nombre
+                guardar_en_nube()
                 st.rerun()
