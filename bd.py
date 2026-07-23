@@ -151,76 +151,7 @@ if st.sidebar.button("🧹 Limpiar Todo el Salón", use_container_width=True):
 # --- RENDERIZADO VISUAL DEL PLANO ---
 st.subheader("🗺️ Plano Arquitectónico del Salón")
 
-if st.button("➕ 🪑 Añadir Nueva Mesa al Salón", type="primary", use_container_width=True):
-    if len(st.session_state.tables) < 14:
-        nuevo_idx = len(st.session_state.tables)
-        x, y = calcular_coordenadas(nuevo_idx)
-        st.session_state.tables.append({
-            "x": x,
-            "y": y,
-            "seats": [{"name": "", "type": "empty"} for _ in range(8)]
-        })
-        guardar_en_nube()
-        st.rerun()
-    else:
-        st.warning("Has alcanzado el límite máximo de 14 mesas.")
-
-svg_width = 2200
-svg_height = 1400
-
-svg_content = f'''
-<svg width="{svg_width}" height="{svg_height}" viewBox="0 0 {svg_width} {svg_height}" style="background-color: #ffffff; border: 2px solid #2f3640; border-radius: 8px;">
-    <defs>
-        <pattern id="grid" width="80" height="80" patternUnits="userSpaceOnUse">
-            <path d="M 80 0 L 0 0 0 80" fill="none" stroke="#e2e8f0" stroke-width="1.5"/>
-        </pattern>
-    </defs>
-    <rect width="100%" height="100%" fill="url(#grid)" />
-'''
-
-for idx, table in enumerate(st.session_state.tables):
-    tx, ty = table['x'], table['y']
-    radius = 120  
-    
-    for s_i in range(8):
-        angle = s_i * (2 * math.pi / 8)
-        sx = tx + radius * math.cos(angle)
-        sy = ty + radius * math.sin(angle)
-        
-        seat = table['seats'][s_i]
-        if seat['type'] == 'adult':
-            s_color = "#00a8ff"  
-            t_color = "#ffffff"
-        elif seat['type'] == 'child':
-            s_color = "#fbc531"  
-            t_color = "#1e293b"
-        else:
-            s_color = "#cbd5e1"  
-            t_color = "#1e293b"
-            
-        svg_content += f'''
-        <circle cx="{sx}" cy="{sy}" r="24" fill="{s_color}" stroke="#475569" stroke-width="2"/>
-        <text x="{sx}" y="{sy+6}" font-size="14" font-weight="bold" fill="{t_color}" text-anchor="middle">{s_i+1}</text>
-        '''
-        if seat['name']:
-            nombre_corto = seat['name'] if len(seat['name']) <= 12 else seat['name'][:10] + ".."
-            svg_content += f'''
-            <text x="{sx}" y="{sy+42}" font-size="13" font-weight="bold" fill="#0f172a" text-anchor="middle">{nombre_corto}</text>
-            '''
-
-    svg_content += f'''
-    <circle cx="{tx}" cy="{ty}" r="52" fill="#1e293b" stroke="#0f172a" stroke-width="3"/>
-    <text x="{tx}" y="{ty+6}" font-size="16" font-weight="bold" fill="#ffffff" text-anchor="middle">Mesa {idx+1}</text>
-    '''
-
-svg_content += '</svg>'
-
-st.components.v1.html(f'<div style="overflow: auto; width: 100%; height: 650px;">{svg_content}</div>', height=670)
-
-# --- RENDERIZADO VISUAL DEL PLANO ---
-st.subheader("🗺️ Plano Arquitectónico del Salón")
-
-if st.button("➕ 🪑 Añadir Nueva Mesa al Salón", type="primary", use_container_width=True):
+if st.button("➕ 🪑 Añadir Nueva Mesa al Salón", type="primary", use_container_width=True, key="btn_main_add"):
     if len(st.session_state.tables) < 14:
         nuevo_idx = len(st.session_state.tables)
         x, y = calcular_coordenadas(nuevo_idx)
@@ -284,7 +215,6 @@ for idx, table in enumerate(st.session_state.tables):
 
 svg_content += '</svg>'
 
-# Componente HTML interactivo con el plano y el botón de descarga directa en PNG
 html_code = f'''
 <div style="margin-bottom: 10px;">
     <button id="download-png-btn" style="background-color: #ff4b4b; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: 0.2s;">
