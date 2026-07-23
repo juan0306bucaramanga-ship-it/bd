@@ -217,6 +217,14 @@ svg_content += '</svg>'
 
 st.components.v1.html(f'<div style="overflow: auto; width: 100%; height: 650px;">{svg_content}</div>', height=670)
 
+# --- BOTÓN DE EXPORTAR PLANO ---
+st.download_button(
+    label="📥 Descargar Plano del Salón (Imagen / Vector)",
+    data=svg_content,
+    file_name="plano_boda_mesas.svg",
+    mime="image/svg+xml",
+    use_container_width=True
+)
 # --- GESTIÓN DETALLADA DE POSICIONES E INVITADOS ---
 st.divider()
 st.subheader("👥 Configuración y Ubicación de Mesas")
